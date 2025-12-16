@@ -85,6 +85,26 @@ sigma = st.sidebar.slider("Volatility (%)", 1.0, 100.0, 18.0, 1.0) / 100
 st.sidebar.markdown("---")
 st.sidebar.info(f"Time to expiry: {T:.4f} years ({days} days)")
 
+st.sidebar.markdown("---")
+st.sidebar.header("💰 Purchase Prices (Optional)")
+st.sidebar.write("Enter your purchase price to see P/L analysis")
+
+call_purchase = st.sidebar.number_input(
+    "Call Purchase Price (₹)", 
+    min_value=0.0, 
+    value=0.0, 
+    step=10.0,
+    help="Leave as 0 to skip P/L analysis"
+)
+
+put_purchase = st.sidebar.number_input(
+    "Put Purchase Price (₹)", 
+    min_value=0.0, 
+    value=0.0, 
+    step=10.0,
+    help="Leave as 0 to skip P/L analysis"
+)
+
 # Calculate prices and greeks
 try:
     bs = BlackScholes(S, K, T, r, sigma)
@@ -96,8 +116,14 @@ try:
     col1, col2 = st.columns(2)
     with col1:
         st.metric("📞 Call Price", f"₹{call_price:.2f}")
+        if call_purchase > 0:
+            call_pl = call_price - call_purchase
+            st.metric("Call P/L", f"₹{call_pl:.2f}", delta=f"{call_pl:.2f}")
     with col2:
         st.metric("📉 Put Price", f"₹{put_price:.2f}")
+        if put_purchase > 0:
+            put_pl = put_price - put_purchase
+            st.metric("Put P/L", f"₹{put_pl:.2f}", delta=f"{put_pl:.2f}")
     
     st.markdown("---")
     
@@ -183,6 +209,96 @@ try:
     
     plt.tight_layout()
     st.pyplot(fig)
+    
+    # P/L Heatmap Section
+    if call_purchase > 0 or put_purchase > 0:
+        st.markdown("---")
+        st.subheader("🔥 P/L Heatmap - Scenario Analysis")
+        st.write("See how your profit/loss changes across different spot prices and volatilities")
+        
+        # Create heatmap data
+        spot_range = np.linspace(S * 0.85, S * 1.15, 20)
+        vol_range = np.linspace(sigma * 0.5, sigma * 1.5, 20)
+        
+        # Choose which option to display
+        option_choice = st.radio("Select Option:", ["Call", "Put"], horizontal=True)
+        
+        # Calculate P/L for each combination
+        pl_matrix = np.zeros((len(vol_range), len(spot_range)))
+        
+        for i, vol in enumerate(vol_range):
+            for j, spot in enumerate(spot_range):
+                try:
+                    bs_temp = BlackScholes(spot, K, T, r, vol)
+                    if option_choice == "Call":
+                        theoretical_price = bs_temp.call_price()
+                        pl_matrix[i, j] = theoretical_price - call_purchase if call_purchase > 0 else 0
+                    else:
+                        theoretical_price = bs_temp.put_price()
+                        pl_matrix[i, j] = theoretical_price - put_purchase if put_purchase > 0 else 0
+                except:
+                    pl_matrix[i, j] = 0
+        
+        # Create heatmap
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Use RdYlGn colormap (Red-Yellow-Green)
+        im = ax.imshow(pl_matrix, cmap='RdYlGn', aspect='auto', 
+                      extent=[spot_range[0], spot_range[-1], vol_range[0]*100, vol_range[-1]*100],
+                      origin='lower')
+        
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label('P/L (₹)', rotation=270, labelpad=20, fontsize=11)
+        
+        # Add contour lines for zero P/L
+        contour = ax.contour(spot_range, vol_range*100, pl_matrix, levels=[0], colors='black', linewidths=2)
+        ax.clabel(contour, inline=True, fontsize=10, fmt='Breakeven')
+        
+        # Labels and title
+        ax.set_xlabel('Spot Price (₹)', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Volatility (%)', fontsize=12, fontweight='bold')
+        ax.set_title(f'{option_choice} Option P/L Heatmap\nGreen = Profit | Red = Loss', 
+                    fontsize=14, fontweight='bold', pad=15)
+        
+        # Add current position marker
+        ax.plot(S, sigma*100, 'b*', markersize=20, label='Current Position', markeredgecolor='white', markeredgewidth=2)
+        ax.legend(fontsize=11)
+        
+        # Grid
+        ax.grid(True, alpha=0.3, linestyle='--')
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+        
+        # Summary stats
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Max Profit", f"₹{np.max(pl_matrix):.2f}")
+        with col2:
+            st.metric("Max Loss", f"₹{np.min(pl_matrix):.2f}")
+        with col3:
+            current_pl = call_price - call_purchase if option_choice == "Call" else put_price - put_purchase
+            st.metric("Current P/L", f"₹{current_pl:.2f}")
+        
+        with st.expander("📊 How to Read This Heatmap"):
+            st.write("""
+            **This heatmap shows your profit/loss for different market scenarios:**
+            
+            - **X-axis (Horizontal):** Different spot prices (stock/index levels)
+            - **Y-axis (Vertical):** Different volatility levels
+            - **Colors:** 
+              - 🟢 **Green** = Profit (theoretical price > your purchase price)
+              - 🟡 **Yellow** = Near breakeven
+              - 🔴 **Red** = Loss (theoretical price < your purchase price)
+            - **Blue Star (⭐):** Your current position
+            - **Black Line:** Breakeven points (zero P/L)
+            
+            **Example:** If the spot moves to ₹22,000 and volatility increases to 25%, 
+            find that cell to see your expected P/L.
+            
+            **Use Case:** Before buying an option, check different scenarios to understand your risk.
+            """)
     
     # Info section
     st.markdown("---")
