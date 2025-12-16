@@ -103,6 +103,7 @@ class BlackScholes:
 
 
 # Helper function to get live data
+@st.cache_data(ttl=300)
 def get_live_price(ticker):
     try:
         stock = yf.Ticker(ticker)
@@ -114,6 +115,7 @@ def get_live_price(ticker):
         return None
 
 # Calculate historical volatility
+@st.cache_data(ttl=300)
 def calc_historical_vol(ticker, days=30):
     try:
         stock = yf.Ticker(ticker)
@@ -201,8 +203,21 @@ st.sidebar.markdown("---")
 
 S = st.sidebar.number_input("Spot Price (S)", min_value=1.0, value=default_spot, step=100.0)
 K = st.sidebar.number_input("Strike Price (K)", min_value=1.0, value=default_spot, step=100.0)
-days = st.sidebar.slider("Days to Expiration", 1, 365, 30)
+
+# Expiry date instead of days slider (simpler for users)
+today = datetime.today().date()
+default_expiry = today + timedelta(days=30)
+expiry_date = st.sidebar.date_input("Expiry Date", value=default_expiry)
+
+# Compute days and T (keep it simple, calendar days)
+try:
+    days = (expiry_date - today).days
+except Exception:
+    days = 30
+if days < 1:
+    days = 1
 T = days / 365
+
 r = st.sidebar.slider("Risk-Free Rate (%)", 0.0, 15.0, 7.0, 0.5) / 100
 sigma = st.sidebar.slider("Volatility (%)", 1.0, 100.0, 18.0, 1.0) / 100
 
