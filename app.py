@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 import matplotlib.pyplot as plt
+import yfinance as yf
+from datetime import datetime, timedelta
 
 # Black-Scholes implementation
 class BlackScholes:
@@ -63,7 +65,66 @@ class BlackScholes:
             return self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(d2) / 100
         else:
             return -self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(-d2) / 100
+    
+    # Implied Volatility using Newton-Raphson
+    def implied_volatility(self, market_price, option_type='call'):
+        # Initial guess
+        sigma = 0.5
+        max_iterations = 100
+        tolerance = 0.0001
+        
+        for i in range(max_iterations):
+            # Calculate price with current sigma
+            bs_temp = BlackScholes(self.S, self.K, self.T, self.r, sigma)
+            if option_type == 'call':
+                price = bs_temp.call_price()
+            else:
+                price = bs_temp.put_price()
+            
+            # Calculate vega
+            vega = bs_temp.vega() * 100
+            
+            # Check if converged
+            diff = market_price - price
+            if abs(diff) < tolerance:
+                return sigma
+            
+            # Newton-Raphson update
+            if vega != 0:
+                sigma = sigma + diff / vega
+            else:
+                break
+            
+            # Keep sigma positive
+            if sigma <= 0:
+                sigma = 0.01
+        
+        return sigma
 
+
+# Helper function to get live data
+def get_live_price(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(period='1d')
+        if not data.empty:
+            return data['Close'].iloc[-1]
+        return None
+    except:
+        return None
+
+# Calculate historical volatility
+def calc_historical_vol(ticker, days=30):
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(period=f'{days+10}d')
+        if len(data) > days:
+            returns = np.log(data['Close'] / data['Close'].shift(1))
+            vol = returns.std() * np.sqrt(252)
+            return vol
+        return None
+    except:
+        return None
 
 # Streamlit UI
 st.set_page_config(page_title="Options Pricing Calculator", page_icon="📊", layout="wide")
@@ -75,8 +136,71 @@ st.markdown("---")
 # Sidebar for inputs
 st.sidebar.header("Input Parameters")
 
-S = st.sidebar.number_input("Spot Price (S)", min_value=1.0, value=21500.0, step=100.0)
-K = st.sidebar.number_input("Strike Price (K)", min_value=1.0, value=21500.0, step=100.0)
+# Live Data Section
+st.sidebar.subheader("📡 Live Data (Optional)")
+use_live_data = st.sidebar.checkbox("Use Live Market Data")
+
+if use_live_data:
+    # Popular Indian stocks/indices
+    ticker_options = {
+        "NIFTY 50": "^NSEI",
+        "BANK NIFTY": "^NSEBANK",
+        "RELIANCE": "RELIANCE.NS",
+        "TCS": "TCS.NS",
+        "HDFC BANK": "HDFCBANK.NS",
+        "INFOSYS": "INFY.NS"
+    }
+    
+    selected_ticker = st.sidebar.selectbox("Select Stock/Index", list(ticker_options.keys()))
+    ticker_symbol = ticker_options[selected_ticker]
+    
+    live_price = get_live_price(ticker_symbol)
+    if live_price:
+        st.sidebar.success(f"Live Price: ₹{live_price:.2f}")
+        default_spot = float(live_price)
+    else:
+        st.sidebar.warning("Could not fetch live data, using default")
+        default_spot = 21500.0
+    
+    # Get historical volatility
+    hist_vol_30 = calc_historical_vol(ticker_symbol, 30)
+    hist_vol_60 = calc_historical_vol(ticker_symbol, 60)
+    
+    if hist_vol_30:
+        st.sidebar.info(f"30-day HV: {hist_vol_30*100:.2f}%")
+    if hist_vol_60:
+        st.sidebar.info(f"60-day HV: {hist_vol_60*100:.2f}%")
+    
+    # Show historical volatility chart
+    if st.sidebar.checkbox("Show HV Chart"):
+        try:
+            stock = yf.Ticker(ticker_symbol)
+            data = stock.history(period='90d')
+            if len(data) > 30:
+                # Calculate rolling 30-day volatility
+                returns = np.log(data['Close'] / data['Close'].shift(1))
+                rolling_vol = returns.rolling(window=30).std() * np.sqrt(252) * 100
+                
+                fig, ax = plt.subplots(figsize=(10, 4))
+                ax.plot(rolling_vol.index, rolling_vol, 'b-', linewidth=1.5)
+                ax.axhline(sigma*100, color='red', linestyle='--', label=f'Current Input: {sigma*100:.1f}%')
+                ax.set_xlabel('Date')
+                ax.set_ylabel('Volatility (%)')
+                ax.set_title('30-Day Historical Volatility')
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                st.sidebar.pyplot(fig)
+        except:
+            st.sidebar.error("Could not fetch data for chart")
+else:
+    default_spot = 21500.0
+
+st.sidebar.markdown("---")
+
+S = st.sidebar.number_input("Spot Price (S)", min_value=1.0, value=default_spot, step=100.0)
+K = st.sidebar.number_input("Strike Price (K)", min_value=1.0, value=default_spot, step=100.0)
 days = st.sidebar.slider("Days to Expiration", 1, 365, 30)
 T = days / 365
 r = st.sidebar.slider("Risk-Free Rate (%)", 0.0, 15.0, 7.0, 0.5) / 100
@@ -150,8 +274,25 @@ try:
     call_price = bs.call_price()
     put_price = bs.put_price()
     
+    # Moneyness Indicator
+    moneyness = (S - K) / K * 100
+    if abs(moneyness) < 2:
+        money_status = "ATM (At The Money)"
+        money_color = "🟡"
+    elif S > K:
+        money_status = f"ITM (In The Money) +{moneyness:.1f}%"
+        money_color = "🟢"
+    else:
+        money_status = f"OTM (Out of The Money) {moneyness:.1f}%"
+        money_color = "🔴"
+    
+    st.info(f"{money_color} **Call Option:** {money_status}")
+    st.info(f"{money_color} **Put Option:** {'ITM' if S < K else 'OTM'} (opposite of Call)")
+    
+    st.markdown("---")
+    
     # Display prices
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("📞 Call Price", f"₹{call_price:.2f}")
         if call_purchase > 0:
@@ -162,6 +303,49 @@ try:
         if put_purchase > 0:
             put_pl = put_price - put_purchase
             st.metric("Put P/L", f"₹{put_pl:.2f}", delta=f"{put_pl:.2f}")
+    with col3:
+        # Break-even prices
+        call_breakeven = K + call_price
+        put_breakeven = K - put_price
+        st.metric("Call Break-even", f"₹{call_breakeven:.2f}")
+        st.metric("Put Break-even", f"₹{put_breakeven:.2f}")
+    
+    st.markdown("---")
+    
+    # Implied Volatility Calculator
+    st.subheader("🔍 Implied Volatility Calculator")
+    st.write("Enter market option price to calculate implied volatility")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        market_call_price = st.number_input("Market Call Price", min_value=0.0, value=0.0, step=10.0)
+        if market_call_price > 0:
+            try:
+                iv_call = bs.implied_volatility(market_call_price, 'call')
+                st.success(f"Implied Vol (Call): **{iv_call*100:.2f}%**")
+                st.write(f"Current input vol: {sigma*100:.2f}%")
+                diff = (iv_call - sigma) * 100
+                if diff > 0:
+                    st.info(f"Market is pricing {diff:.2f}% higher volatility")
+                else:
+                    st.info(f"Market is pricing {abs(diff):.2f}% lower volatility")
+            except:
+                st.error("Could not calculate IV")
+    
+    with col2:
+        market_put_price = st.number_input("Market Put Price", min_value=0.0, value=0.0, step=10.0)
+        if market_put_price > 0:
+            try:
+                iv_put = bs.implied_volatility(market_put_price, 'put')
+                st.success(f"Implied Vol (Put): **{iv_put*100:.2f}%**")
+                st.write(f"Current input vol: {sigma*100:.2f}%")
+                diff = (iv_put - sigma) * 100
+                if diff > 0:
+                    st.info(f"Market is pricing {diff:.2f}% higher volatility")
+                else:
+                    st.info(f"Market is pricing {abs(diff):.2f}% lower volatility")
+            except:
+                st.error("Could not calculate IV")
     
     st.markdown("---")
     
@@ -387,6 +571,108 @@ try:
             
             **Use Case:** Before buying an option, check different scenarios to understand your risk.
             """)
+    
+    # Option Strategies
+    st.markdown("---")
+    st.subheader("📊 Option Strategies")
+    st.write("Popular trading strategies with payoff diagrams")
+    
+    strategy = st.selectbox("Select Strategy", [
+        "Bull Call Spread",
+        "Bear Put Spread", 
+        "Long Straddle",
+        "Iron Condor"
+    ])
+    
+    # Strategy parameters
+    col1, col2 = st.columns(2)
+    with col1:
+        lower_strike = st.number_input("Lower Strike", min_value=1.0, value=K-500, step=100.0)
+    with col2:
+        upper_strike = st.number_input("Upper Strike", min_value=lower_strike+100, value=K+500, step=100.0)
+    
+    # Calculate strategy
+    spot_prices = np.linspace(K * 0.7, K * 1.3, 100)
+    
+    if strategy == "Bull Call Spread":
+        # Buy lower strike call, sell higher strike call
+        bs_lower = BlackScholes(S, lower_strike, T, r, sigma)
+        bs_upper = BlackScholes(S, upper_strike, T, r, sigma)
+        
+        cost = bs_lower.call_price() - bs_upper.call_price()
+        
+        payoff = []
+        for spot in spot_prices:
+            long_call = max(spot - lower_strike, 0)
+            short_call = max(spot - upper_strike, 0)
+            payoff.append(long_call - short_call - cost)
+        
+        st.info(f"Net Cost: ₹{cost:.2f} | Max Profit: ₹{(upper_strike-lower_strike-cost):.2f} | Max Loss: ₹{cost:.2f}")
+    
+    elif strategy == "Bear Put Spread":
+        # Buy higher strike put, sell lower strike put
+        bs_lower = BlackScholes(S, lower_strike, T, r, sigma)
+        bs_upper = BlackScholes(S, upper_strike, T, r, sigma)
+        
+        cost = bs_upper.put_price() - bs_lower.put_price()
+        
+        payoff = []
+        for spot in spot_prices:
+            long_put = max(upper_strike - spot, 0)
+            short_put = max(lower_strike - spot, 0)
+            payoff.append(long_put - short_put - cost)
+        
+        st.info(f"Net Cost: ₹{cost:.2f} | Max Profit: ₹{(upper_strike-lower_strike-cost):.2f} | Max Loss: ₹{cost:.2f}")
+    
+    elif strategy == "Long Straddle":
+        # Buy call and put at same strike
+        bs_k = BlackScholes(S, K, T, r, sigma)
+        cost = bs_k.call_price() + bs_k.put_price()
+        
+        payoff = []
+        for spot in spot_prices:
+            call_payoff = max(spot - K, 0)
+            put_payoff = max(K - spot, 0)
+            payoff.append(call_payoff + put_payoff - cost)
+        
+        st.info(f"Net Cost: ₹{cost:.2f} | Profit if spot moves beyond: ₹{K-cost:.2f} or ₹{K+cost:.2f}")
+    
+    elif strategy == "Iron Condor":
+        # Sell call spread and put spread
+        k1 = lower_strike - 500
+        k2 = lower_strike
+        k3 = upper_strike
+        k4 = upper_strike + 500
+        
+        bs1 = BlackScholes(S, k1, T, r, sigma)
+        bs2 = BlackScholes(S, k2, T, r, sigma)
+        bs3 = BlackScholes(S, k3, T, r, sigma)
+        bs4 = BlackScholes(S, k4, T, r, sigma)
+        
+        credit = (bs2.put_price() - bs1.put_price()) + (bs3.call_price() - bs4.call_price())
+        
+        payoff = []
+        for spot in spot_prices:
+            put_spread = max(k2 - spot, 0) - max(k1 - spot, 0)
+            call_spread = max(spot - k3, 0) - max(spot - k4, 0)
+            payoff.append(credit - put_spread - call_spread)
+        
+        st.info(f"Net Credit: ₹{credit:.2f} | Max Loss: ₹{(500-credit):.2f}")
+    
+    # Plot strategy
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(spot_prices, payoff, 'b-', linewidth=2)
+    ax.axhline(0, color='black', linestyle='--', alpha=0.5)
+    ax.axvline(S, color='orange', linestyle='--', alpha=0.5, label=f'Current Spot={S}')
+    ax.fill_between(spot_prices, payoff, 0, where=(np.array(payoff) > 0), alpha=0.3, color='green')
+    ax.fill_between(spot_prices, payoff, 0, where=(np.array(payoff) < 0), alpha=0.3, color='red')
+    ax.set_xlabel('Spot Price at Expiration')
+    ax.set_ylabel('Profit/Loss')
+    ax.set_title(f'{strategy} Payoff Diagram')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    st.pyplot(fig)
     
     # Info section
     st.markdown("---")
