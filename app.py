@@ -11,6 +11,39 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 from datetime import datetime, timedelta
 
+# Add floating social media icons with CSS
+st.markdown("""
+    <style>
+    .social-icons {
+        position: fixed;
+        top: 70px;
+        right: 20px;
+        z-index: 999;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 10px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        display: flex;
+        gap: 10px;
+    }
+    .social-icons a {
+        transition: transform 0.3s ease;
+        display: inline-block;
+    }
+    .social-icons a:hover {
+        transform: scale(1.15);
+    }
+    </style>
+    <div class="social-icons">
+        <a href="https://www.linkedin.com/in/avishkar-lokhande-9b68b024a/" target="_blank" title="LinkedIn">
+            <img src="https://cdn-icons-png.flaticon.com/512/174/174857.png" width="35" />
+        </a>
+        <a href="https://github.com/Avishkar-Lokhande" target="_blank" title="GitHub">
+            <img src="https://cdn-icons-png.flaticon.com/512/25/25231.png" width="35" />
+        </a>
+    </div>
+""", unsafe_allow_html=True)
+
 # Black-Scholes implementation
 class BlackScholes:
     """Black-Scholes model for pricing European options"""
@@ -724,20 +757,4 @@ except ValueError as e:
 
 # Footer
 st.markdown("---")
-
-# Social media links with icons
-col1, col2, col3 = st.columns([2, 1, 2])
-
-with col2:
-    st.markdown("""
-        <div style='text-align: center;'>
-            <a href='https://www.linkedin.com/in/avishkar-lokhande-9b68b024a/' target='_blank'>
-                <img src='https://cdn-icons-png.flaticon.com/512/174/174857.png' width='40' style='margin: 0 10px;'/>
-            </a>
-            <a href='https://github.com/Avishkar-Lokhande' target='_blank'>
-                <img src='https://cdn-icons-png.flaticon.com/512/25/25231.png' width='40' style='margin: 0 10px;'/>
-            </a>
-        </div>
-    """, unsafe_allow_html=True)
-
 st.markdown("<p style='text-align: center;'>Built with Python, NumPy, SciPy, and Streamlit</p>", unsafe_allow_html=True)
