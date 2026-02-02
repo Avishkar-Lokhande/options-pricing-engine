@@ -724,4 +724,20 @@ except ValueError as e:
 
 # Footer
 st.markdown("---")
-st.markdown("Built with Python, NumPy, SciPy, and Streamlit")
+
+# Social media links with icons
+col1, col2, col3 = st.columns([2, 1, 2])
+
+with col2:
+    st.markdown("""
+        <div style='text-align: center;'>
+            <a href='https://www.linkedin.com/in/avishkar-lokhande-9b68b024a/' target='_blank'>
+                <img src='https://cdn-icons-png.flaticon.com/512/174/174857.png' width='40' style='margin: 0 10px;'/>
+            </a>
+            <a href='https://github.com/Avishkar-Lokhande' target='_blank'>
+                <img src='https://cdn-icons-png.flaticon.com/512/25/25231.png' width='40' style='margin: 0 10px;'/>
+            </a>
+        </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<p style='text-align: center;'>Built with Python, NumPy, SciPy, and Streamlit</p>", unsafe_allow_html=True)
