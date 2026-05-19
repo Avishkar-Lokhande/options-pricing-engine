@@ -4,8 +4,72 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import yfinance as yf
 from datetime import datetime, timedelta
+import math
+from scipy.stats import norm
 
-from backend.pricing_engine import BlackScholes
+
+class BlackScholes:
+    def __init__(self, S, K, T, r, sigma):
+        if S <= 0 or K <= 0:
+            raise ValueError("S and K must be positive")
+        if T <= 0:
+            raise ValueError("T must be positive")
+        if sigma <= 0:
+            raise ValueError("sigma must be positive")
+        self.S, self.K, self.T, self.r, self.sigma = float(S), float(K), float(T), float(r), float(sigma)
+
+    def _d1(self):
+        return (math.log(self.S / self.K) + (self.r + 0.5 * self.sigma ** 2) * self.T) / (self.sigma * math.sqrt(self.T))
+
+    def _d2(self):
+        return self._d1() - self.sigma * math.sqrt(self.T)
+
+    def call_price(self):
+        d1, d2 = self._d1(), self._d2()
+        return self.S * norm.cdf(d1) - self.K * math.exp(-self.r * self.T) * norm.cdf(d2)
+
+    def put_price(self):
+        d1, d2 = self._d1(), self._d2()
+        return self.K * math.exp(-self.r * self.T) * norm.cdf(-d2) - self.S * norm.cdf(-d1)
+
+    def delta(self, option_type="call"):
+        d1 = self._d1()
+        return norm.cdf(d1) if option_type == "call" else norm.cdf(d1) - 1
+
+    def gamma(self):
+        return norm.pdf(self._d1()) / (self.S * self.sigma * math.sqrt(self.T))
+
+    def theta(self, option_type="call"):
+        d1, d2 = self._d1(), self._d2()
+        common = -(self.S * norm.pdf(d1) * self.sigma) / (2 * math.sqrt(self.T))
+        if option_type == "call":
+            return common - self.r * self.K * math.exp(-self.r * self.T) * norm.cdf(d2)
+        return common + self.r * self.K * math.exp(-self.r * self.T) * norm.cdf(-d2)
+
+    def vega(self):
+        return self.S * math.sqrt(self.T) * norm.pdf(self._d1()) / 100
+
+    def rho(self, option_type="call"):
+        d2 = self._d2()
+        if option_type == "call":
+            return self.K * self.T * math.exp(-self.r * self.T) * norm.cdf(d2) / 100
+        return -self.K * self.T * math.exp(-self.r * self.T) * norm.cdf(-d2) / 100
+
+    def implied_volatility(self, market_price, option_type="call", max_iterations=100, tolerance=1e-6):
+        sigma = 0.5
+        for _ in range(max_iterations):
+            bs = BlackScholes(self.S, self.K, self.T, self.r, sigma)
+            price = bs.call_price() if option_type == "call" else bs.put_price()
+            vega = bs.vega() * 100
+            diff = market_price - price
+            if abs(diff) < tolerance:
+                return sigma
+            if vega == 0:
+                break
+            sigma += diff / vega
+            if sigma <= 0:
+                sigma = 0.01
+        raise ValueError("Implied volatility did not converge")
 
 # ── PAGE CONFIG — must be the very first Streamlit call ───────────────────────
 st.set_page_config(
