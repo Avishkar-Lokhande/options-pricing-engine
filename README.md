@@ -1,94 +1,120 @@
-# Options Pricing Calculator
+# Options Pricing and Greeks Calculator
 
-A simple options pricing calculator using the Black-Scholes model. Built with Python and Streamlit.
+Black-Scholes based options calculator with:
+- Streamlit app (`app.py`) for full-feature interactive usage
+- FastAPI backend (`backend/api.py`) for API-first architecture
+- Ad-friendly static frontend (`web/`) for Netlify/Vercel hosting and monetization
 
-## What it does
+## Features
 
-- Calculates European call and put option prices
-- Shows all the Greeks (Delta, Gamma, Theta, Vega, Rho)
-- Visualizes payoff diagrams
-- Interactive web interface
-
-## How to use
-
-### Running locally
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the app
-streamlit run app.py
-```
-
-The app will open in your browser at `http://localhost:8501`
-
-### Using the calculator
-
-1. Enter your parameters in the sidebar:
-   - Spot price (current stock/index price)
-   - Strike price
-   - Days to expiration
-   - Risk-free rate (usually around 7% for India)
-   - Volatility (historical or implied)
-
-2. The app will show you:
-   - Call and put prices
-   - All the Greeks
-   - Payoff diagrams showing profit/loss at expiration
-
-## The Math
-
-The Black-Scholes formula for a call option:
-
-```
-C = S×N(d₁) - K×e^(-rT)×N(d₂)
-```
-
-Where:
-- S = spot price
-- K = strike price
-- T = time to expiration (years)
-- r = risk-free rate
-- σ = volatility
-- N(x) = cumulative normal distribution
-
-And:
-```
-d₁ = [ln(S/K) + (r + σ²/2)T] / (σ√T)
-d₂ = d₁ - σ√T
-```
+- European call/put pricing
+- Greeks: Delta, Gamma, Theta, Vega, Rho
+- Implied volatility (Newton-Raphson)
+- Streamlit UI with live market helpers
+- API endpoints for web/mobile integration
+- Static wrapper page with ad slot and legal pages
 
 ## Project Structure
 
-```
-├── app.py              # Main Streamlit application
-├── requirements.txt    # Python dependencies
-└── README.md          # This file
+```text
+.
+├── app.py
+├── backend/
+│   ├── __init__.py
+│   ├── api.py
+│   └── pricing_engine.py
+├── web/
+│   ├── index.html
+│   ├── script.js
+│   ├── styles.css
+│   ├── privacy.html
+│   ├── terms.html
+│   └── disclaimer.html
+├── requirements.txt
+├── main.ipynb
+├── TUTORIAL.md
+└── README.md
 ```
 
-## Technologies
+## Quick Start
 
-- Python 3.x
-- Streamlit (web interface)
-- NumPy (numerical calculations)
-- SciPy (normal distribution functions)
-- Pandas (data handling)
-- Matplotlib (charts)
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Run Streamlit app (existing full app)
+
+```bash
+streamlit run app.py
+```
+
+### 3. Run API backend (for frontend/API mode)
+
+```bash
+uvicorn backend.api:app --reload
+```
+
+API docs open at `http://127.0.0.1:8000/docs`.
+
+### 4. Run static monetization frontend
+
+Use any static server from the `web` folder. Example with Python:
+
+```bash
+python -m http.server 8080
+```
+
+Then open `http://127.0.0.1:8080/web/`.
+
+## Deploy for Ads
+
+### Fastest path (no heavy rewrite)
+
+1. Deploy Streamlit app (Streamlit Cloud / Render / Railway).
+2. Deploy `web/` to Netlify or Vercel.
+3. In `web/index.html`:
+- Add your real AdSense script (`ca-pub-...`).
+- Create and insert real ad units where `AdSense slot` placeholder exists.
+- Set your deployed Streamlit URL in Embedded Streamlit Mode.
+
+This gives monetization with minimal risk: ads on your static website, calculator in iframe.
+
+### API-first path (better long-term)
+
+1. Deploy FastAPI backend (Render/Railway/Fly.io).
+2. In `web/index.html`, set API Base URL to your deployed API.
+3. Use API Calculator Mode for direct backend calls.
+
+## API Endpoints
+
+- `GET /health`
+- `POST /price`
+- `POST /greeks`
+- `POST /iv`
+
+Example payload:
+
+```json
+{
+  "S": 21500,
+  "K": 21500,
+  "T": 0.0822,
+  "r": 0.07,
+  "sigma": 0.18
+}
+```
+
+## SEO and Approval Checklist
+
+- Keep legal pages: `web/privacy.html`, `web/terms.html`, `web/disclaimer.html`
+- Add original educational content pages (important for AdSense approval)
+- Add analytics and Search Console
+- Target intent keywords like "options greeks calculator India"
 
 ## Notes
 
-- This implements the Black-Scholes model for **European options** (can only be exercised at expiration)
-- Doesn't account for dividends
-- Assumes constant volatility and interest rates
-- Real market prices may differ due to factors like supply/demand, volatility smile, early exercise, etc.
+- Black-Scholes assumptions: European options, constant volatility/rates, no dividends.
+- Model output is theoretical and may differ from market prices.
 
-## References
-
-- [Options, Futures, and Other Derivatives](https://www.amazon.com/Options-Futures-Other-Derivatives-9th/dp/0133456315) by John Hull
-- [Black-Scholes Model on Wikipedia](https://en.wikipedia.org/wiki/Black%E2%80%93Scholes_model)
-- [Investopedia: Greeks](https://www.investopedia.com/terms/g/greeks.asp)
-
-## License
-
-Feel free to use this for learning and portfolio projects.
